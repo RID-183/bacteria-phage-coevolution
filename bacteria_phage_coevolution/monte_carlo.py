@@ -1,5 +1,5 @@
 from collections import namedtuple
-from math import exp
+from math import e, exp
 from random import random
 
 
@@ -68,10 +68,11 @@ def calculate_next_gen(CurrentState, SimulationParameters):
                 "infected_bacteria_count"
             ] -= 1
 
+            a = e/2
             secondary_killing = int(
                 uninfected_bacteria
                 * exp(
-                    -CurrentState.gen_count / SimulationParameters.latent_period * 1.5
+                    -CurrentState.gen_count / SimulationParameters.latent_period * a
                 )
             )
             carry_over[carry_over_index % carry_over_size][
@@ -102,9 +103,13 @@ def apply_carry_over(NextGen):
     infected_bacteria += NextGen.carry_over[gen_count % carry_over_size][
         "infected_bacteria_count"
     ]
-    uninfected_bacteria += NextGen.carry_over[gen_count % carry_over_size][
-        "uninfected_bacteria_count"
-    ]
+
+    secondary_killing_rate = abs(NextGen.carry_over[gen_count % carry_over_size]["uninfected_bacteria_count"] / uninfected_bacteria)
+    print(secondary_killing_rate)
+    for _ in range(uninfected_bacteria):
+        r = random()
+        if r < secondary_killing_rate:
+            uninfected_bacteria -= 1
 
     gen_count += 1
     UpdatedNextGen = GenState(
@@ -131,7 +136,7 @@ def monte_carlo(n):
     return GS
 
 
-FinalState = monte_carlo(1000)
+FinalState = monte_carlo(100)
 print(f"Uninfected bacteria count: {FinalState.uninfected_bacteria}")
 print(f"Phages count: {FinalState.phages}")
 print(f"Infected bacteria: {FinalState.infected_bacteria}")
