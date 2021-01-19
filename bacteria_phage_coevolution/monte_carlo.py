@@ -1,5 +1,5 @@
 from collections import namedtuple
-from math import log
+from math import exp
 from random import random
 
 
@@ -11,12 +11,11 @@ GenState = namedtuple(
         "infected_bacteria",
         "carry_over",
         "gen_count",
-        "past_total_uninfected",
     ],
 )
 MCParameters = namedtuple(
     "MCParameters",
-    ["adsorption_rate", "burst_size", "latent_period"],
+    ["growth_rate", "carrying_capacity", "burst_size", "latent_period"],
 )
 
 
@@ -27,36 +26,48 @@ def calculate_next_gen(CurrentState, SimulationParameters):
         infected_bacteria,
         carry_over,
         gen_count,
-        past_total_uninfected,
     ) = CurrentState
 
-    second_last_uninfected, last_uninfected = past_total_uninfected
-    total_uninfected = last_uninfected
+    increased_uninfected_bacteria = (
+        SimulationParameters.growth_rate
+        * uninfected_bacteria
+        * (1 - uninfected_bacteria / SimulationParameters.carrying_capacity)
+    )
+    dN = increased_uninfected_bacteria - uninfected_bacteria
+    duplication_rate = dN / uninfected_bacteria
 
-    dN = last_uninfected - second_last_uninfected
-    duplication_rate = log(dN) / 10
+    moi = phages / uninfected_bacteria
+    adsorption_rate = moi * exp(-moi)
+
+    carry_over_index = gen_count + SimulationParameters.latent_period
+    carry_over_size = len(carry_over)
+
+    carry_over[carry_over_index % carry_over_size] = {
+        "phage_count": 0,
+        "infected_bacteria_count": 0,
+    }
 
     for _ in range(uninfected_bacteria):
         random_1 = random()
         random_2 = random()
-
-        if random_1 >= SimulationParameters.adsorption_rate:
+        if random_1 >= adsorption_rate:
             if random_2 >= duplication_rate:
                 continue
             elif random_2 < duplication_rate:
                 uninfected_bacteria += 1
-                total_uninfected += 1
-        elif random_1 < SimulationParameters.adsorption_rate:
+        elif random_1 < adsorption_rate:
             uninfected_bacteria -= 1
             infected_bacteria += 1
-            carry_over[gen_count + SimulationParameters.latent_period][
+            phages -= 1
+
+            carry_over[carry_over_index % carry_over_size][
                 "phage_count"
             ] += SimulationParameters.burst_size
-            carry_over[gen_count + SimulationParameters.latent_period][
+            carry_over[carry_over_index % carry_over_size][
                 "infected_bacteria_count"
             ] -= 1
 
-    past_total_uninfected = (last_uninfected, total_uninfected)
+    carry_over[carry_over_index % carry_over_size]["phage_count"] //= 20
 
     NextGen = GenState(
         uninfected_bacteria,
@@ -64,7 +75,6 @@ def calculate_next_gen(CurrentState, SimulationParameters):
         infected_bacteria,
         carry_over,
         gen_count,
-        past_total_uninfected,
     )
     return NextGen
 
@@ -74,8 +84,12 @@ def apply_carry_over(NextGen):
     infected_bacteria = NextGen.infected_bacteria
     gen_count = NextGen.gen_count
 
-    phages += NextGen.carry_over[gen_count]["phage_count"]
-    infected_bacteria += NextGen.carry_over[gen_count]["infected_bacteria_count"]
+    carry_over_size = len(NextGen.carry_over)
+
+    phages += NextGen.carry_over[gen_count % carry_over_size]["phage_count"]
+    infected_bacteria += NextGen.carry_over[gen_count % carry_over_size][
+        "infected_bacteria_count"
+    ]
 
     gen_count += 1
     UpdatedNextGen = GenState(
@@ -84,23 +98,25 @@ def apply_carry_over(NextGen):
         infected_bacteria,
         NextGen.carry_over,
         gen_count,
-        NextGen.past_total_uninfected,
     )
     return UpdatedNextGen
 
 
 def monte_carlo(n):
-    SimulationParameters = MCParameters(0.5, 10, 2)
+    SimulationParameters = MCParameters(2, 5000, 150, 3)
 
     carry_over = [
         {"phage_count": 0, "infected_bacteria_count": 0}
-        for _ in range(n + SimulationParameters.latent_period)
+        for _ in range(SimulationParameters.latent_period + 1)
     ]
-    GS = GenState(1000, 500, 0, carry_over, 0, (1000, 1020))
+    GS = GenState(1000, 1000, 0, carry_over, 0)
 
     for _ in range(n):
         GS = apply_carry_over(calculate_next_gen(GS, SimulationParameters))
     return GS
 
 
-print(monte_carlo(10))
+FinalState = monte_carlo(10)
+print(f"Uninfected bacteria count: {FinalState.uninfected_bacteria}")
+print(f"Phages count: {FinalState.phages}")
+print(f"Infected bacteria: {FinalState.infected_bacteria}")
